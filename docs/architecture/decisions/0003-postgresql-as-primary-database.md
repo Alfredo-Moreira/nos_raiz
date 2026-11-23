@@ -4,6 +4,8 @@
 - **Date:** 2026-11-22
 - **Deciders:** Project owner
 
+> **Note (2026-11-22):** The NAS is a UGREEN, not a Synology, and the MVP uses the NAS's existing shared PostgreSQL 16 instance ([ADR-0010](0010-mvp-on-home-nas.md)). The reasoning below is unchanged.
+
 ## Context and problem statement
 
 Family data is a graph (see [ADR-0002](0002-model-family-graph-as-edge-tables.md)), which suggests a graph database. But the MVP runs on a home Synology NAS with limited memory, holds thousands to tens of thousands of people, and also needs ordinary relational data: users, sessions, places, events. Which database should the MVP use, and how do we keep the option of a graph database open for the platform phase?

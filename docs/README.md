@@ -15,8 +15,8 @@ This folder is the source of truth for what Nôs Raiz is, how it is built, and w
 | | [Decisions (ADRs)](architecture/decisions/README.md) | Why was each significant choice made? |
 | Security | [Overview](security/overview.md) | How are accounts, access and private data handled? |
 | | [Threat model](security/threat-model.md) | What could go wrong and what mitigates it? |
-| Operations | [Deployment](operations/deployment.md) | How is it installed on the Synology NAS? |
-| | [Backup and restore](operations/backup-and-restore.md) | How is family data protected against loss? |
+| Operations | [Deployment](operations/deployment.md) | How is the MVP deployed on the home NAS? |
+| | [Backup and restore](operations/backup-and-restore.md) | How will family data be protected against loss? (open) |
 | Reference | [Glossary](glossary.md) | What do genealogy and Cape Verdean terms mean? |
 
 ## Conventions
@@ -30,8 +30,10 @@ This folder is the source of truth for what Nôs Raiz is, how it is built, and w
 
 These are tracked here until decided, then recorded in the relevant doc or ADR.
 
-| Question | Options | Affects |
+| Question | Next step | Affects |
 | --- | --- | --- |
-| License | Private (no license), MIT, AGPL-3.0 | Root `LICENSE`, contribution terms |
-| Remote access for family outside the home network | Tailscale, Synology VPN Server, reverse proxy with HTTPS | [Threat model](security/threat-model.md), [Deployment](operations/deployment.md) |
-| Tree renderer | family-chart library, custom D3 + ELK layout | [Tech stack](architecture/tech-stack.md) |
+| What a person, event and place hold | Dedicated nodes design session | [Data model](architecture/data-model.md) |
+| Tree-rendering library | Evaluate libraries and skills after the nodes session | [Tech stack](architecture/tech-stack.md) |
+| Authentication library | Choose when sign-in is built | [ADR-0008](architecture/decisions/0008-oauth-only-sign-in.md) |
+| Backup strategy | NAS owner to decide | [Backup and restore](operations/backup-and-restore.md), [threat model](security/threat-model.md) T8 |
+| Production hosting | Decide before opening beyond the family | [ADR-0010](architecture/decisions/0010-mvp-on-home-nas.md#when-to-move-off-the-nas) |

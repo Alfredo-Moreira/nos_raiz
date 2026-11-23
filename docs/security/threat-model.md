@@ -1,57 +1,62 @@
 # Threat model
 
-Scope: the MVP, running on a home Synology NAS for one family. Revisit this document before the platform phase, when the app becomes multi-family and possibly internet-hosted.
+Scope: the MVP, running on the home NAS and publicly reachable through a Cloudflare tunnel ([ADR-0010](../architecture/decisions/0010-mvp-on-home-nas.md)). Revisit this document before moving to production infrastructure or opening sign-up.
 
 ## Assets
 
 | Asset | Why it matters |
 | --- | --- |
-| Personal data of living people | Names, birth dates, birthplaces and mothers' maiden names enable identity theft and answer common security questions |
-| Family history as a whole | Years of irreplaceable work and recorded oral history |
-| User accounts | Grant read or write access to the above |
-| The NAS itself | Hosts other household data; a compromised app must not become a way in |
+| Personal details of family members | Full names with exact birth dates, birthplaces and maiden names enable identity theft and answer common security questions |
+| The family history as a whole | Years of irreplaceable research and recorded oral history |
+| Member accounts and share links | Grant read or write access to the above |
+| The NAS and its other apps | A compromised app must not become a way into the rest of the home network |
 
 ## Trust boundaries
 
 ```mermaid
 flowchart LR
-    subgraph home["Home network"]
-        devices["Family devices"]
-        subgraph nas["Synology NAS"]
-            app["App container"]
-            db[("PostgreSQL<br/>(Docker network only)")]
-        end
-    end
-    remote["Family members<br/>away from home"]
+    visitor["Anyone on the internet<br/>(members, link visitors, attackers)"]
+    google["Google<br/>(sign-in)"]
 
-    devices -->|HTTPS| app
-    remote -.->|"Remote access method<br/>(open question)"| app
-    app --> db
+    subgraph cloud["Cloudflare"]
+        edge["Edge: TLS, DDoS protection"]
+    end
+
+    subgraph nas["Home NAS"]
+        tunnel["cloudflared<br/>(outbound only)"]
+        zoraxy["Zoraxy"]
+        app["nos-raiz app<br/>(no published ports)"]
+        pg[("Shared postgres<br/>nosraiz database")]
+    end
+
+    visitor -->|HTTPS| edge
+    visitor <-->|OAuth| google
+    edge --> tunnel --> zoraxy --> app
+    app --> pg
 ```
 
-The database is reachable only from the app container. Nothing on the NAS is port-forwarded to the internet.
+The router has no open inbound ports. Everything reaches the app through Cloudflare.
 
 ## Threats and mitigations
 
 | # | Threat | Impact | Mitigation | Status |
 | --- | --- | --- | --- | --- |
-| T1 | Data loss: disk failure, accidental deletion, ransomware on the NAS | High | Nightly `pg_dump`; Hyper Backup to an off-device, versioned, encrypted destination; tested restore | Planned |
-| T2 | App exposed to the internet and attacked (credential stuffing, exploits) | High | Do not port-forward the app directly; prefer VPN or Tailscale; if a reverse proxy is used, HTTPS plus rate limiting | **Open: remote access decision** |
-| T3 | Weak or reused family passwords | Medium | Argon2id hashing, 12-character minimum, common-password check, login rate limiting | Planned |
-| T4 | A viewer edits or deletes data | Medium | Server-side role checks on every route | Planned |
-| T5 | Bad edit corrupts the tree (wrong parent, accidental delete) | Medium | Confirmation on deletes; nightly backups for recovery; audit log and undo in v1 | Partly planned |
-| T6 | Living people's details shared outside the family via export | Medium | Export restricted to editors and admins; "privatise living people" export option | Planned |
-| T7 | SQL injection or cross-site scripting | High | Parameterised queries (Drizzle), schema validation, React escaping, Content-Security-Policy | Planned |
-| T8 | Secrets leaked through the repository | High | `.env` on the NAS only; `.env.example` without values; secret scanning on GitHub | Planned |
-| T9 | Vulnerable dependency | Medium | `npm audit` in CI, Dependabot, pinned base images | Planned |
-| T10 | Database reachable from the network | High | PostgreSQL bound to the internal Docker network only; no published port | Planned |
+| T1 | A forwarded share link exposes living relatives' identity details | High | Protected view for every person: year and country only, no notes. Living people can never be made public | Designed ([ADR-0009](../architecture/decisions/0009-per-tree-roles-and-protected-view.md)) |
+| T2 | An API endpoint returns protected fields to a viewer or link visitor | High | Single visibility filter in the API; per-role, per-endpoint field tests | Designed |
+| T3 | A stranger signs in with any Google account | High | Invite-only: only invited verified emails are accepted | Designed |
+| T4 | A viewer edits or deletes data | Medium | Server-side role checks on every route | Designed |
+| T5 | Share link token guessed or leaked | Medium | 128-bit random tokens, hashed at rest, revocable, optional expiry, `no-referrer`, `noindex` | Designed |
+| T6 | Session hijacking | Medium | `HttpOnly`, `Secure`, `SameSite` cookies; HTTPS everywhere via Cloudflare; session revocation | Designed |
+| T7 | SQL injection or cross-site scripting | High | Parameterised queries (Drizzle), schema validation, React escaping, Content-Security-Policy | Designed |
+| T8 | Data loss: disk failure, accidental deletion, bad edit, ransomware | High | Not yet mitigated by the app; backup strategy pending | **Open** |
+| T9 | Secrets leaked through the repository or image | High | `.env` never committed; image pushed only to the private LAN registry; GitHub secret scanning | Designed |
+| T10 | Compromised app container used to attack the NAS | High | Read-only filesystem, non-root, all capabilities dropped, `no-new-privileges`; only the networks it needs | Designed |
+| T11 | Compromised app reads other apps' data in the shared PostgreSQL | Medium | Dedicated `nosraiz` role that owns only its database; `CONNECT` revoked from `PUBLIC` | Designed |
+| T12 | Vulnerable dependency | Medium | `pnpm audit` in CI, Dependabot, pinned base images | Designed |
+| T13 | Denial of service | Low | Cloudflare edge protection; per-IP rate limiting | Designed |
 
-## Remote access options (for T2)
+## Accepted risks
 
-| Option | Exposure to the internet | Effort for family members | Notes |
-| --- | --- | --- | --- |
-| Tailscale | None (private mesh network) | Install an app once per device | Strong default for a family |
-| Synology VPN Server | One VPN port | Configure a VPN profile per device | Built into the NAS |
-| Reverse proxy + HTTPS (Synology or Caddy) | The app is public | None, just a URL | Needs strong auth, rate limiting and timely updates; highest risk |
-
-Recommendation to evaluate: Tailscale, because it exposes nothing publicly. The decision will be recorded as a new ADR.
+- **Maiden names are visible** in the protected view, because names and relationships are the purpose of the tree. See [ADR-0009](../architecture/decisions/0009-per-tree-roles-and-protected-view.md).
+- **Home availability:** power or internet outages take the app offline. Acceptable for a family showcase.
+- **No backups yet** (T8): until the owner's backup strategy is in place, data on the NAS can be lost.

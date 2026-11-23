@@ -1,8 +1,10 @@
 # 0005. Self-host on Synology with Docker
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0010](0010-mvp-on-home-nas.md)
 - **Date:** 2026-11-22
 - **Deciders:** Project owner
+
+> **Superseded.** This decision assumed a Synology NAS and home-network-only access. The actual server is a UGREEN NAS behind a Cloudflare tunnel; see [ADR-0010](0010-mvp-on-home-nas.md).
 
 ## Context and problem statement
 

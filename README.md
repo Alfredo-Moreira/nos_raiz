@@ -6,17 +6,18 @@ Nôs Raiz ("our roots" in Cape Verdean Kriolu) is a genealogy platform for build
 
 **Pre-MVP: design phase.** There is no application code yet. The architecture, scope and key decisions are documented in [`docs/`](docs/README.md).
 
-The MVP is a private, self-hosted family tree app running on a Synology NAS for a single family.
+The MVP is a family tree app for one family, running on a home NAS as a showcase and functional test, with invite-only Google sign-in and shareable read-only links.
 
 ## At a glance
 
 | | |
 | --- | --- |
-| Backend | TypeScript, Node.js, Fastify, Drizzle ORM |
-| Frontend | React |
-| Database | PostgreSQL |
-| Hosting | Docker (docker-compose) on Synology Container Manager |
-| Interchange | GEDCOM export (import later) |
+| Backend | TypeScript, Node.js, Fastify, Drizzle ORM, REST |
+| Frontend | React, Vite |
+| Database | PostgreSQL 16 |
+| Sign-in | Google (OAuth only) |
+| Development | Docker Compose only, driven by `make` |
+| MVP hosting | Home NAS (UGOS, arm64) behind a Cloudflare tunnel |
 
 ## Documentation
 
@@ -33,7 +34,7 @@ The MVP is a private, self-hosted family tree app running on a Synology NAS for 
 
 ## Getting started
 
-Setup instructions will be added once the first application code lands. Deployment is planned as a single `docker compose up` on the NAS; see [deployment](docs/operations/deployment.md).
+Developer setup will be documented in `docs/development/` with the first application code. The only host requirements will be Docker and make.
 
 ## Contributing
 
@@ -41,4 +42,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Security issues: see [SECURITY.md](SECUR
 
 ## License
 
-Not yet decided. See [open questions](docs/README.md#open-questions).
+Copyright © 2026 Alfredo Ramos Moreira. All rights reserved. See [LICENSE](LICENSE).
