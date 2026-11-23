@@ -34,7 +34,7 @@ docs(adr): record decision on PostgreSQL
 
 Significant technical decisions are recorded as Architecture Decision Records (ADRs).
 
-1. Copy [`docs/architecture/decisions/template.md`](docs/architecture/decisions/template.md) to the next number, for example `0006-short-title.md`.
+1. Copy [`docs/architecture/decisions/template.md`](docs/architecture/decisions/template.md) to the next free number in the [ADR index](docs/architecture/decisions/README.md), for example `0011-short-title.md`.
 2. Fill it in with status `Proposed`, and add it to the [ADR index](docs/architecture/decisions/README.md) with the same status.
 3. Open a pull request; discussion happens there.
 4. Before merging, set the status to `Accepted` (or `Rejected`) in both the ADR and the index.

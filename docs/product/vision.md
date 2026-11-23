@@ -19,11 +19,11 @@ General-purpose genealogy services do not handle this well: they assume a single
 
 ## Principles
 
-1. **Family data belongs to the family.** Self-hostable, exportable (GEDCOM) at any time, never locked in.
+1. **Family data belongs to the family.** Exportable (GEDCOM) at any time, never locked in.
 2. **Model real families.** Remarriage, half-siblings, adoption, cousin marriages, uncertain dates and multiple name spellings are normal, not edge cases.
 3. **Cape Verde first.** Places, naming conventions (including *nome de casa*) and languages (Portuguese, Kriolu, English) are first-class.
-4. **Private by default.** Information about living people is visible only to signed-in family members.
-5. **Simple to run.** One `docker compose up` on a home NAS; backups that a non-expert can restore.
+4. **Recognisable, never exploitable.** By default the tree shows enough to know who someone is, never enough to steal their identity. Full details are for the people a tree's owners trust.
+5. **Easy to share.** A relative without an account can open a link and see the whole tree.
 
 ## What success looks like
 

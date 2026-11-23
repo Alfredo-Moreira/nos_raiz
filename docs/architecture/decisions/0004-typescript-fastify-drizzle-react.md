@@ -4,6 +4,8 @@
 - **Date:** 2026-11-22
 - **Deciders:** Project owner
 
+> **Note (2026-11-22):** The package manager is pnpm, and all tooling runs inside Docker; see [ADR-0006](0006-monorepo-with-docker-only-development.md).
+
 ## Context and problem statement
 
 The project is built and maintained by a small team, initially one person. Which language and frameworks should the backend and frontend use?
