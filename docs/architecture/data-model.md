@@ -1,0 +1,218 @@
+# Data model
+
+A family tree is a graph, not a tree. Every child has two parents, people have several partners over a lifetime, and marriages between relatives make the same ancestor appear more than once (pedigree collapse). Nôs Raiz therefore stores **people as nodes** and **relationships as typed edges** in their own tables. No person record points to its parents directly. See [ADR-0002](decisions/0002-model-family-graph-as-edge-tables.md).
+
+## Entity relationship diagram
+
+```mermaid
+erDiagram
+    person ||--o{ person_name : "is also known as"
+    person ||--o{ parent_child : "is parent in"
+    person ||--o{ parent_child : "is child in"
+    person ||--o{ partnership : "is partner A in"
+    person ||--o{ partnership : "is partner B in"
+    person ||--o{ event : "has"
+    partnership ||--o{ event : "has"
+    place ||--o{ event : "is location of"
+    place ||--o{ place : "contains"
+    app_user |o--o| person : "is"
+
+    person {
+        uuid id PK
+        text given_names
+        text surnames
+        text nickname "nome de casa"
+        text sex
+        bool is_living
+        text notes
+        timestamptz created_at
+        timestamptz updated_at
+        uuid created_by FK
+    }
+    person_name {
+        uuid id PK
+        uuid person_id FK
+        text type "birth, married, variant"
+        text given_names
+        text surnames
+    }
+    parent_child {
+        uuid id PK
+        uuid parent_id FK
+        uuid child_id FK
+        text kind "biological, adoptive, step, foster, unknown"
+    }
+    partnership {
+        uuid id PK
+        uuid person_a_id FK
+        uuid person_b_id FK
+        text kind "marriage, civil, partner, unknown"
+    }
+    event {
+        uuid id PK
+        text type
+        uuid person_id FK "nullable"
+        uuid partnership_id FK "nullable"
+        uuid place_id FK "nullable"
+        text date_text
+        text date_qualifier
+        date date_start
+        date date_end
+        text date_precision
+        date sort_date
+        text description
+    }
+    place {
+        uuid id PK
+        text name
+        text kind "village, parish, island, country, city, state"
+        uuid parent_place_id FK
+    }
+    app_user {
+        uuid id PK
+        text username
+        text password_hash
+        text role "admin, editor, viewer"
+        uuid person_id FK "nullable"
+    }
+```
+
+## Tables
+
+### `person`
+
+One row per individual. Names here are the primary (usually birth) name; variants live in `person_name`.
+
+- `nickname` holds the *nome de casa*, which is often how someone is actually known in Cape Verde.
+- `is_living` drives privacy rules. New people default to living. The service layer sets it to `false` when a death or burial event is added, or when the birth `sort_date` is more than 110 years ago. Editors can override it either way.
+
+### `person_name`
+
+Alternate names for search and display: married names, spelling variants across Portuguese, Cape Verdean and US records (Gonçalves, Goncalves, Gonsalves).
+
+### `parent_child`
+
+The core edge. One row per parent–child link.
+
+- `kind` distinguishes biological, adoptive, step, foster and unknown, so a child can have biological and adoptive parents at once.
+- Unique on `(parent_id, child_id)`; check constraint `parent_id <> child_id`.
+- Business rules enforced in the service layer: at most two biological parents per child, and no person may be their own ancestor (no cycles).
+
+### `partnership`
+
+A union between two people. Multiple partnerships per person are normal. The same pair may have more than one row (for example, divorced and remarried). Marriage, divorce and other dates are `event` rows linked by `partnership_id`.
+
+Children are **not** attached to a partnership. A child's parents are its `parent_child` rows; the UI groups children under a partnership when both partners are the child's parents. This keeps single-parent and unknown-parent cases simple.
+
+### `event`
+
+A dated fact about a person (birth, baptism, death, burial, emigration, residence) or a partnership (marriage, divorce). Exactly one of `person_id` or `partnership_id` is set (check constraint).
+
+### `place`
+
+Places form a hierarchy through `parent_place_id`:
+
+```
+Cabo Verde (country)
+└── Brava (island)
+    └── Nova Sintra (village)
+United States (country)
+└── Massachusetts (state)
+    └── New Bedford (city)
+```
+
+A place's full name ("Nova Sintra, Brava, Cabo Verde") is built by walking up the hierarchy.
+
+### `app_user`
+
+A login account, separate from `person`. A user may be linked to their own person in the tree so the UI can show "you" and compute "how am I related to…". See [security overview](../security/overview.md).
+
+## Fuzzy dates
+
+Genealogical dates are often uncertain or partial. Every event stores both what was entered and a machine-sortable interpretation.
+
+| Column | Purpose |
+| --- | --- |
+| `date_text` | Exactly what the user entered, shown back unchanged |
+| `date_qualifier` | `exact`, `about`, `before`, `after`, `between` |
+| `date_start`, `date_end` | The range the date could fall in |
+| `date_precision` | `day`, `month` or `year` |
+| `sort_date` | The date used for ordering and age calculations |
+
+| Entered | Qualifier | Start | End | Precision | Sort date |
+| --- | --- | --- | --- | --- | --- |
+| 14 March 1911 | exact | 1911-03-14 | 1911-03-14 | day | 1911-03-14 |
+| March 1911 | exact | 1911-03-01 | 1911-03-31 | month | 1911-03-01 |
+| c. 1890 | about | 1890-01-01 | 1890-12-31 | year | 1890-01-01 |
+| before 1902 | before | – | 1901-12-31 | year | 1901-12-31 |
+| after 1880 | after | 1881-01-01 | – | year | 1881-01-01 |
+| 1880–1885 | between | 1880-01-01 | 1885-12-31 | year | 1880-01-01 |
+
+A single date parser in the backend produces these columns; GEDCOM export maps them back to GEDCOM date phrases (`ABT 1890`, `BEF 1902`, `BET 1880 AND 1885`).
+
+## Derived relationships
+
+Siblings, grandparents, cousins and "how are we related?" are **computed, never stored**, so they can never drift out of sync with the edges.
+
+- **Siblings:** people who share at least one parent. Full siblings share two; half-siblings share one.
+- **Ancestors / descendants:** recursive walk over `parent_child`.
+- **Relationship between A and B:** find common ancestors with their generation distance from each person. The nearest common ancestor at distances *d<sub>A</sub>* and *d<sub>B</sub>* gives:
+  - both 1: siblings
+  - one is 0: direct ancestor/descendant (parent, grandparent…)
+  - one is 1, the other 2 or more: aunt/uncle and niece/nephew (great- and grand- prefixes as the larger distance grows)
+  - otherwise: cousin degree = min(*d<sub>A</sub>*, *d<sub>B</sub>*) − 1, removed = |*d<sub>A</sub>* − *d<sub>B</sub>*|
+
+Kinship (ancestors, siblings, cousins, "how are we related?") follows **biological and adoptive** links only. Step, foster and unknown links are displayed in the tree but never counted as kinship.
+
+### Example: ancestors of a person
+
+```sql
+WITH RECURSIVE ancestors AS (
+    SELECT pc.parent_id AS person_id, 1 AS generation
+    FROM parent_child pc
+    WHERE pc.child_id = $1
+      AND pc.kind IN ('biological', 'adoptive')
+
+    UNION ALL
+
+    SELECT pc.parent_id, a.generation + 1
+    FROM parent_child pc
+    JOIN ancestors a ON pc.child_id = a.person_id
+    WHERE a.generation < $2            -- depth limit
+      AND pc.kind IN ('biological', 'adoptive')
+)
+SELECT person_id, MIN(generation) AS generation
+FROM ancestors
+GROUP BY person_id;                    -- pedigree collapse: same ancestor via two paths
+```
+
+The depth limit is a safety guard; the service layer already prevents cycles.
+
+## Repository interface
+
+All graph traversals go through one interface. Nothing else in the backend writes recursive queries.
+
+```ts
+interface GenealogyRepository {
+  getAncestors(personId: string, maxGenerations?: number): Promise<RelativeAtDistance[]>;
+  getDescendants(personId: string, maxGenerations?: number): Promise<RelativeAtDistance[]>;
+  getSiblings(personId: string): Promise<Sibling[]>; // full and half
+  findCommonAncestors(a: string, b: string): Promise<CommonAncestor[]>;
+  findRelationshipPath(a: string, b: string): Promise<RelationshipPath | null>;
+  wouldCreateCycle(parentId: string, childId: string): Promise<boolean>;
+}
+```
+
+The PostgreSQL implementation uses recursive CTEs. A graph-database implementation could replace it without changing callers. See [ADR-0003](decisions/0003-postgresql-as-primary-database.md).
+
+## Search
+
+- `unaccent` makes "Goncalves" match "Gonçalves".
+- `pg_trgm` trigram similarity tolerates small spelling differences ("Gonsalves").
+- A GIN trigram index over the unaccented, lower-cased full name from `person` and `person_name` makes this fast.
+
+## Post-MVP additions
+
+- `media` (photos, scans) with files on the NAS filesystem and metadata in the database
+- `source` and `citation` linking events to the records that support them
+- `audit_log` for change history and undo
